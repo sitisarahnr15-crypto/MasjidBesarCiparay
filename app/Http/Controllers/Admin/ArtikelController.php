@@ -1,20 +1,22 @@
 <?php
+
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Artikel;
+use Cloudinary\Cloudinary;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class ArtikelController extends Controller
 {
-   public function index()
-{
-    $artikels = \App\Models\Artikel::latest()->get();
+    public function index()
+    {
+        $artikels = Artikel::latest()->get();
 
-    return view('admin.artikel.index', compact('artikels'));
-}
+        return view('admin.artikel.index', compact('artikels'));
+    }
 
     public function create()
     {
@@ -40,7 +42,15 @@ class ArtikelController extends Controller
         }
 
         if ($request->hasFile('gambar')) {
-            $data['gambar'] = $request->file('gambar')->store('artikel', 'public');
+            $upload = (new Cloudinary())->uploadApi()->upload(
+                $request->file('gambar')->getRealPath(),
+                [
+                    'asset_folder' => 'artikel',
+                ]
+            );
+
+            $data['gambar'] = $upload['secure_url'];
+            $data['cloudinary_public_id'] = $upload['public_id'];
         }
 
         Artikel::create($data);
@@ -72,7 +82,10 @@ class ArtikelController extends Controller
         ]);
 
         if ($data['judul'] !== $artikel->judul) {
-            $data['slug'] = $this->buatSlugUnik($data['judul'], $artikel->id);
+            $data['slug'] = $this->buatSlugUnik(
+                $data['judul'],
+                $artikel->id
+            );
         }
 
         if ($data['status'] === 'published' && empty($data['tanggal_publikasi'])) {
@@ -81,15 +94,28 @@ class ArtikelController extends Controller
                 ?? now()->toDateString();
         }
 
-        if ($request->hasFile('gambar')) {
-            if ($artikel->gambar) {
-                Storage::disk('public')->delete($artikel->gambar);
-            }
+        // Simpan lokasi gambar lama sebelum menggantinya.
+        $gambarLama = $artikel->gambar;
+        $publicIdLama = $artikel->cloudinary_public_id;
 
-            $data['gambar'] = $request->file('gambar')->store('artikel', 'public');
+        if ($request->hasFile('gambar')) {
+            $upload = (new Cloudinary())->uploadApi()->upload(
+                $request->file('gambar')->getRealPath(),
+                [
+                    'asset_folder' => 'artikel',
+                ]
+            );
+
+            $data['gambar'] = $upload['secure_url'];
+            $data['cloudinary_public_id'] = $upload['public_id'];
         }
 
         $artikel->update($data);
+
+        // Hapus gambar lama setelah gambar baru berhasil disimpan.
+        if ($request->hasFile('gambar')) {
+            $this->hapusGambar($gambarLama, $publicIdLama);
+        }
 
         return redirect()->route('admin.artikel.index')
             ->with('success', 'Artikel berhasil diperbarui.');
@@ -97,9 +123,10 @@ class ArtikelController extends Controller
 
     public function destroy(Artikel $artikel)
     {
-        if ($artikel->gambar) {
-            Storage::disk('public')->delete($artikel->gambar);
-        }
+        $this->hapusGambar(
+            $artikel->gambar,
+            $artikel->cloudinary_public_id
+        );
 
         $artikel->delete();
 
@@ -107,8 +134,30 @@ class ArtikelController extends Controller
             ->with('success', 'Artikel berhasil dihapus.');
     }
 
-    private function buatSlugUnik(string $judul, ?int $kecualiId = null): string
+    private function hapusGambar(?string $gambar, ?string $publicId): void
     {
+        if ($publicId) {
+            (new Cloudinary())->uploadApi()->destroy(
+                $publicId,
+                [
+                    'resource_type' => 'image',
+                    'type' => 'upload',
+                ]
+            );
+
+            return;
+        }
+
+        // Gambar lama yang masih tersimpan di penyimpanan lokal.
+        if ($gambar && !filter_var($gambar, FILTER_VALIDATE_URL)) {
+            Storage::disk('public')->delete($gambar);
+        }
+    }
+
+    private function buatSlugUnik(
+        string $judul,
+        ?int $kecualiId = null
+    ): string {
         $slugDasar = Str::slug($judul) ?: 'artikel';
         $slug = $slugDasar;
         $nomor = 2;

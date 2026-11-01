@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -196,7 +195,7 @@
         @if($artikel->gambar)
             <img
                 class="cover"
-                src="{{ asset('storage/' . $artikel->gambar) }}"
+                src="{{ str_starts_with($artikel->gambar, 'http') ? $artikel->gambar : asset('storage/' . $artikel->gambar) }}"
                 alt="{{ $artikel->judul }}"
             >
         @else

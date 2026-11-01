@@ -13,6 +13,7 @@ class Artikel extends Model
     'ringkasan',
     'isi',
     'gambar',
+    'cloudinary_public_id',
     'tanggal_publikasi',
     'status',
 ];

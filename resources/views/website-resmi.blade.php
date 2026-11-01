@@ -1263,7 +1263,7 @@
                             <div class="article-image">
                                 @if (!empty($artikel->gambar))
                                     <img
-                                        src="{{ asset('storage/' . $artikel->gambar) }}"
+                                       src="{{ str_starts_with($artikel->gambar, 'http') ? $artikel->gambar : asset('storage/' . $artikel->gambar) }}"
                                         alt="{{ $artikel->judul ?? 'Artikel Masjid Besar Ciparay' }}"
                                         loading="lazy"
                                     >
